@@ -1,65 +1,240 @@
-import Image from "next/image";
+"use client";
+
+import { useCallback, useState, useEffect } from "react";
+import Link from "next/link";
+
+import {
+  getAllCategoryOptions,
+  getAllCategoryOptionsAsync,
+  CategoryKey,
+  getFlowForMode,
+  MatchId,
+  Matches,
+  Mode,
+  orderForMode,
+  findAutoAdvanceMatch,
+  getCurrentMatchId,
+  roundName,
+  seedBracket,
+} from "@/lib/bracket";
+
+const pushWinner = (state: Matches, matchId: MatchId, winner: string, mode: Mode) => {
+  const next: Matches = { ...state };
+  let champion: string | null = null;
+  const flowMap = getFlowForMode(mode);
+  const finalMatchId: MatchId = mode === 8 ? 7 : 9;
+
+  if (matchId === finalMatchId) {
+    next[finalMatchId] = [winner];
+    champion = winner;
+  }
+
+  const route = flowMap[matchId];
+  if (route) {
+    const destination = state[route.winnerTo];
+    const updatedDestination = [...destination];
+    updatedDestination[route.position] = winner;
+    next[route.winnerTo] = updatedDestination;
+  }
+
+  return { matches: next, champion };
+};
+
+const resolveByes = (state: Matches, mode: Mode) => {
+  let snapshot = state;
+  const autoWinners: string[] = [];
+
+  while (true) {
+    const autoMatch = findAutoAdvanceMatch(snapshot, mode);
+    if (!autoMatch) break;
+    const result = pushWinner(snapshot, autoMatch.matchId, autoMatch.winner, mode);
+    autoWinners.push(autoMatch.winner);
+    snapshot = result.matches;
+    if (result.champion) break;
+  }
+
+  return { matches: snapshot, autoWinners };
+};
+
+const getChampionName = (matches: Matches, mode: Mode): string | null => {
+  const finalMatchId: MatchId = mode === 8 ? 7 : 9;
+  const final = matches[finalMatchId];
+  if (Array.isArray(final) && final.length === 1 && final[0]) {
+    return final[0];
+  }
+  return null;
+};
+
+const formatPlaceholder = (value: string | null) => value ?? "—";
 
 export default function Home() {
+  const [category, setCategory] = useState<CategoryKey>("fizzy");
+  const [categoryOptions, setCategoryOptions] = useState(() => getAllCategoryOptions());
+  const seeded = seedBracket(category);
+  const [matches, setMatches] = useState<Matches>(() => {
+    const resolved = resolveByes(seeded.matches, seeded.mode);
+    return resolved.matches;
+  });
+  const [mode, setMode] = useState<Mode>(seeded.mode);
+  const [title, setTitle] = useState(seeded.title);
+  const [poolInfo, setPoolInfo] = useState(seeded.poolInfo);
+  const [status, setStatus] = useState("Ready.");
+
+  // Load categories asynchronously to include custom brackets
+  useEffect(() => {
+    getAllCategoryOptionsAsync().then(setCategoryOptions).catch(() => {
+      // Fallback to sync version on error
+    });
+  }, []);
+
+  const matchOrder = orderForMode(mode);
+  const totalMatches = matchOrder.length;
+  const champion = getChampionName(matches, mode);
+  const tentativeMatchId = champion ? null : getCurrentMatchId(matches, mode);
+  const currentMatchId = champion ? null : tentativeMatchId;
+  const activePair = currentMatchId ? matches[currentMatchId] : null;
+
+  const reseed = useCallback((cat: CategoryKey) => {
+    const seeded = seedBracket(cat);
+    const resolved = resolveByes(seeded.matches, seeded.mode);
+    setMatches(resolved.matches);
+    setMode(seeded.mode);
+    setTitle(seeded.title);
+    setPoolInfo(seeded.poolInfo);
+    const seededChampion = getChampionName(resolved.matches, seeded.mode);
+    setStatus(seededChampion ? `🏆 ${seededChampion} wins it all!` : "Ready.");
+  }, []);
+
+  const handlePick = useCallback(
+    (matchId: MatchId, winner: string | null) => {
+      if (!winner) return;
+
+      let championCandidate: string | null = null;
+      const autoMessages: string[] = [];
+
+      setMatches((prev) => {
+        const result = pushWinner(prev, matchId, winner, mode);
+        championCandidate = result.champion;
+        let updatedMatches = result.matches;
+
+        if (!championCandidate) {
+          const resolved = resolveByes(updatedMatches, mode);
+          updatedMatches = resolved.matches;
+          const resolvedChampion = getChampionName(updatedMatches, mode);
+          championCandidate = resolvedChampion;
+          if (resolved.autoWinners.length) {
+            autoMessages.push(
+              ...resolved.autoWinners.map((name) => `Auto-advanced ${name}`),
+            );
+          }
+        } else {
+          championCandidate = getChampionName(updatedMatches, mode) ?? championCandidate;
+        }
+
+        return updatedMatches;
+      });
+
+      if (championCandidate) {
+        setStatus(`🏆 ${championCandidate} wins it all!`);
+        return;
+      }
+
+      if (autoMessages.length) {
+        setStatus([`Picked ${winner}`, ...autoMessages].join(" → "));
+        return;
+      }
+
+      setStatus(`Picked ${winner}`);
+    },
+    [mode],
+  );
+
+  const onCategoryChange = (value: CategoryKey) => {
+    setCategory(value);
+    reseed(value);
+  };
+
+  const onReset = () => {
+    reseed(category);
+  };
+
+  const roundLabel = champion
+    ? "Champion"
+    : currentMatchId
+      ? roundName(currentMatchId)
+      : "Waiting…";
+  const progressLabel = champion
+    ? "Done"
+    : currentMatchId
+      ? `Match ${matchOrder.indexOf(currentMatchId) + 1} of ${totalMatches}`
+      : "All set";
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="wrap">
+      <header className="header">
+        <div className="title">{title}</div>
+        <select
+          className="category-select"
+          value={category}
+          onChange={(event) => onCategoryChange(event.target.value as CategoryKey)}
+        >
+          {categoryOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="chip">{poolInfo}</span>
+        <div className="spacer" />
+        <Link href="/admin" className="btn small" style={{ textDecoration: "none" }}>
+          Admin
+        </Link>
+        <button type="button" className="btn small" onClick={onReset}>
+          Reset
+        </button>
+      </header>
+
+      <div className="stage">
+        <div>{roundLabel}</div>
+        <div>{progressLabel}</div>
+      </div>
+
+      <div className="arena">
+        {champion ? (
+          <div className="card champ">🏆 {champion}</div>
+        ) : currentMatchId && activePair ? (
+          <>
+            <button
+              type="button"
+              className="card"
+              onClick={() => handlePick(currentMatchId, activePair[0])}
+              disabled={!activePair[0]}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              {formatPlaceholder(activePair[0])}
+            </button>
+            <div className="vs">tap a winner</div>
+            <button
+              type="button"
+              className="card"
+              onClick={() => handlePick(currentMatchId, activePair[1])}
+              disabled={!activePair[1]}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+              {formatPlaceholder(activePair[1])}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="card">—</div>
+            <div className="vs">tap a winner</div>
+            <div className="card">—</div>
+          </>
+        )}
+      </div>
+
+      <footer className="footer">
+        <div>{status}</div>
+        <div className="spacer" />
+      </footer>
     </div>
   );
 }
