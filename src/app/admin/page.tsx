@@ -337,6 +337,7 @@ export default function AdminPage() {
                         if (confirm("Reset this bracket to its original built-in values?")) {
                           // Delete the custom override to restore built-in
                           await deleteCustomBracket(bracket.id);
+                          // Fetch updated brackets after deletion
                           const brackets = await getCustomBrackets();
                           setCustomBrackets(brackets);
                         }
