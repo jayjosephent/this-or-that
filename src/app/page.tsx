@@ -229,7 +229,7 @@ export default function Home() {
             <div className="card">—</div>
           </>
         )}
-      </div>
+        </div>
 
       <footer className="footer">
         <div>{status}</div>

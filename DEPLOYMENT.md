@@ -12,7 +12,7 @@ Vercel is made by the Next.js team and offers the easiest deployment experience.
    git add .
    git commit -m "Initial commit"
    git branch -M main
-   git remote add origin https://github.com/YOUR_USERNAME/this-or-that.git
+   git remote add origin https://github.com/jayjosephent/this-or-that.git
    git push -u origin main
    ```
 

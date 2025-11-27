@@ -7,9 +7,16 @@ import type { User } from "@supabase/supabase-js";
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
+    // Only create client on client side
+    if (typeof window === "undefined") {
+      setLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
+
     // Get initial session
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
@@ -25,10 +32,13 @@ export function useAuth() {
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase]);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
-    // Use Supabase client directly for better session management
+    if (typeof window === "undefined") {
+      throw new Error("Sign in is only available on the client");
+    }
+    const supabase = createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -45,7 +55,10 @@ export function useAuth() {
   };
 
   const signUp = async (email: string, password: string) => {
-    // Use Supabase client directly for better session management
+    if (typeof window === "undefined") {
+      throw new Error("Sign up is only available on the client");
+    }
+    const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -62,6 +75,8 @@ export function useAuth() {
   };
 
   const signOut = async () => {
+    if (typeof window === "undefined") return;
+    const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
   };
