@@ -333,11 +333,12 @@ export default function AdminPage() {
                     <button
                       type="button"
                       className="btn small"
-                      onClick={() => {
+                      onClick={async () => {
                         if (confirm("Reset this bracket to its original built-in values?")) {
                           // Delete the custom override to restore built-in
-                          deleteCustomBracket(bracket.id);
-                          setCustomBrackets(getCustomBrackets());
+                          await deleteCustomBracket(bracket.id);
+                          const brackets = await getCustomBrackets();
+                          setCustomBrackets(brackets);
                         }
                       }}
                       style={{ backgroundColor: "#6c757d", color: "#fff", borderColor: "#6c757d" }}
